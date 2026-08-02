@@ -1,6 +1,7 @@
 # Project-Specific
 
 
+
 # Ansible
 .ansible/
 *.retry
@@ -17,6 +18,7 @@
 
 # Configurations
 .env
+config.ini
 config.yml
 config.yaml
 
@@ -37,6 +39,7 @@ go.work.sum
 
 # go-task
 .task/
+.task_start_time
 
 # Python
 __marimo__/
@@ -153,6 +156,13 @@ terraform.rc
 
 # macOS
 .DS_Store
+
+# Virtual Machine Images
+*.ova
+*.qcow2
+*.vdi
+*.vhdx
+*.vmdk
 
 # Windows
 *.cab

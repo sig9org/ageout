@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sig9org/ageout/main/assets/logo.png" alt="ageout">
+  <img src="https://raw.githubusercontent.com/sig9org/ageout/main/assets/logo.webp" alt="ageout">
 </p>
 
 # ageout
@@ -34,9 +34,9 @@ By default, age is judged by each file's **last modified time**. Pass
 | `-r` | `-recursive` | Search directories recursively |
 | `-c` | `-created` | Use file creation time instead of last modified time |
 |  | `-dryrun` | Report target files without deleting them |
-| `-s` | `-silent` | Suppress printing of every scanned file's status and elapsed age |
+|  | `-silent` | Suppress printing of every scanned file's status and elapsed age |
 |  | `-debug` | Print timestamped debug tracing of ageout's internal steps to stdout |
-| `-u` | `-update` | Update ageout to the latest release and exit |
+|  | `-update` | Update ageout to the latest release and exit |
 | `-v` | `-version` | Print the version number and exit |
 | `-h` | `-help` | Show the help message and exit |
 
@@ -52,8 +52,13 @@ modified time, or creation time with `-created`) was, relative to now:
 The leading tag reflects what happened to the file: `[delete]` for a file
 that was actually removed, `[dry-run]` for a file that would have been
 removed under `-dryrun`, and `[skip]` for a file that was younger than the
-age threshold and therefore kept. Pass `-s`/`-silent` to suppress this
-output entirely.
+age threshold and therefore kept. Pass `-silent` to suppress this output
+entirely. If both `-silent` and `-debug` are given, `-debug` tracing still
+prints — `-debug` takes priority over `-silent`.
+
+`-v`/`-version` and `-h`/`-help` both print the tool name, released
+version, and the commit it was built from, e.g. `ageout v1.2.3 (commit
+abc1234def0)`; `-h`/`-help` additionally prints full usage.
 
 Warnings are printed in orange, errors in red, and debug tracing in gray;
 normal status output is left uncolored. Set `NO_COLOR` (see

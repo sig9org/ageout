@@ -83,8 +83,12 @@ func TestRun_HelpFlag(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			if !strings.Contains(stdout.String(), "usage: ageout") {
-				t.Errorf("stdout = %q, want it to contain usage text", stdout.String())
+			out := stdout.String()
+			if !strings.Contains(out, "usage: ageout") {
+				t.Errorf("stdout = %q, want it to contain usage text", out)
+			}
+			if !strings.Contains(out, "ageout "+version.Version+" (commit ") {
+				t.Errorf("stdout = %q, want it to show the tool name, version, and commit", out)
 			}
 		})
 	}
@@ -99,9 +103,9 @@ func TestRun_VersionFlag(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 			got := strings.TrimSpace(stdout.String())
-			want := "ageout " + version.Version
-			if got != want {
-				t.Errorf("stdout = %q, want %q", got, want)
+			wantPrefix := "ageout " + version.Version + " (commit "
+			if !strings.HasPrefix(got, wantPrefix) || !strings.HasSuffix(got, ")") {
+				t.Errorf("stdout = %q, want it to match %q...)", got, wantPrefix)
 			}
 		})
 	}
@@ -297,7 +301,7 @@ func TestRun_KeepsFreshFiles(t *testing.T) {
 }
 
 func TestRun_SilentFlag(t *testing.T) {
-	for _, flagName := range []string{"-s", "--silent"} {
+	for _, flagName := range []string{"-silent", "--silent"} {
 		t.Run(flagName, func(t *testing.T) {
 			dir := t.TempDir()
 			f := filepath.Join(dir, "a.txt")
@@ -512,7 +516,7 @@ func TestRun_HelpMentionsUpdateFlag(t *testing.T) {
 }
 
 func TestRun_UpdateFlag(t *testing.T) {
-	for _, flagName := range []string{"-u", "-update"} {
+	for _, flagName := range []string{"-update", "--update"} {
 		t.Run(flagName, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			var gotCurrent string

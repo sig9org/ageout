@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ageout is a small Go CLI that deletes files once they've aged past a
 threshold (`-year`/`-month`/`-day`/`-hour`/`-min`), optionally restricted to
 a directory and/or a filename regexp. It can also update itself in place
-from GitHub releases (`-u`/`-update`). Module path:
+from GitHub releases (`-update`). Module path:
 `github.com/sig9org/ageout`.
 
 Long flags use a single hyphen (`-year`, not `--year`), per Go's `flag`
@@ -16,7 +16,7 @@ strips one or two leading dashes identically. `printUsage` and the README
 intentionally show only the single-hyphen form.
 
 External dependencies: `golang.org/x/sys` (Linux birth-time syscall) and
-`github.com/creativeprojects/go-selfupdate` (the `-u`/`-update`
+`github.com/creativeprojects/go-selfupdate` (the `-update`
 implementation). The latter supports GitHub/GitLab/Gitea as update sources,
 so `go.mod` carries a fair number of indirect dependencies (gitea/gitlab/
 go-github clients, oauth2, httpsig, etc.) purely as its transitive closure —
@@ -81,7 +81,15 @@ don't run it against a module/tag that isn't actually meant to be published.
 Version strings are injected at build time via `-ldflags
 "-X .../internal/version.Version=..."`; `go build .` alone produces a
 binary reporting `version.Version == "dev"`. A `dev` build can't self-update
-(see below) — `-u`/`-update` requires a semver-parseable version.
+(see below) — `-update` requires a semver-parseable version.
+
+`version.Commit()` (`internal/version/version.go`) is separate from
+`Version` and needs no ldflags: it reads `runtime/debug.ReadBuildInfo`'s
+`vcs.revision`/`vcs.modified` settings, which the Go toolchain stamps into
+every binary automatically as long as the build happens inside a git
+checkout (true for both `task go-build` and `task go-all-build`, and for a
+plain local `go build .`). `-v`/`-version` and `-h`/`-help` both print
+`Version` and `Commit()` together via `versionLine()` in `cli.go`.
 
 ## Architecture
 
@@ -98,7 +106,7 @@ cli.Run:
   purge.Purger{GetFileTime,Debugf}.Run(...) → walks files, deletes/reports/skips, prints per file
 ```
 
-`-u`/`-update` short-circuits this pipeline entirely: it calls
+`-update` short-circuits this pipeline entirely: it calls
 `selfupdate.Update` (`internal/selfupdate/selfupdate.go`) and exits, without
 touching `scan`/`age`/`purge`. `selfupdate.Update` wraps
 `github.com/creativeprojects/go-selfupdate`'s `UpdateSelf`, pointed at the
@@ -145,20 +153,22 @@ Key design points, each with a reason that matters when touching the code:
   `purge.Purger.Run` always writes one line per scanned file — target or
   not — tagged `[delete]`, `[dry-run]`, or `[skip]`, plus an
   `(elapsed: <N>d<N>h<N>m)` computed from `now` (see `formatElapsed` in
-  `internal/purge/purge.go`). `-s`/`-silent` is what suppresses this, by
+  `internal/purge/purge.go`). `-silent` is what suppresses this, by
   swapping the writer for `io.Discard` in `cli.Run` — the printing logic
-  itself is unconditional. `-debug` tracing is independent of `-silent`: it
-  always writes to `cfg.Stdout` directly, so passing both flags together
-  still produces debug tracing with the per-file status lines suppressed.
+  itself is unconditional. `-debug` tracing is independent of `-silent`, and
+  takes priority over it: `-debug` always writes to `cfg.Stdout` directly,
+  so passing both flags together still produces debug tracing with the
+  per-file status lines suppressed.
 - **`-dryrun`** is the only spelling (no internal hyphen); it was
   deliberately chosen over `-dry-run` — don't reintroduce the hyphenated
   form.
 - **Flag name duplication is intentional**: every long flag is registered
   twice under a short and long name via separate `fs.BoolVar`/`fs.IntVar`
-  calls sharing one variable, rather than an alias mechanism (`dryrun` and
-  `debug` are the exceptions, having no short form). `printUsage` in
-  `cli.go` is hand-maintained plain text, not generated — keep it in sync
-  with flag definitions by hand when adding/renaming flags.
+  calls sharing one variable, rather than an alias mechanism (`dryrun`,
+  `silent`, `debug`, and `update` are the exceptions, having no short form —
+  `-s` and `-u` were deliberately removed, so don't reintroduce them).
+  `printUsage` in `cli.go` is hand-maintained plain text, not generated —
+  keep it in sync with flag definitions by hand when adding/renaming flags.
 - **`scan.Files`** is the only place recursion/pattern-matching happens;
   `purge.Purger.Run` has no knowledge of directories, patterns, or
   recursion — it only sees a flat file list and per-file timestamps.
