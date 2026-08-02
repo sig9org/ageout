@@ -80,7 +80,6 @@ func Run(cfg Config) error {
 	fs.BoolVar(&dryRun, "dryrun", false, "print target files without deleting them")
 
 	var silent bool
-	fs.BoolVar(&silent, "s", false, "suppress printing of every scanned file's status and elapsed age")
 	fs.BoolVar(&silent, "silent", false, "suppress printing of every scanned file's status and elapsed age")
 
 	var showVersion bool
@@ -92,7 +91,6 @@ func Run(cfg Config) error {
 	fs.BoolVar(&showHelp, "help", false, "show this help message and exit")
 
 	var doUpdate bool
-	fs.BoolVar(&doUpdate, "u", false, "update ageout to the latest release and exit")
 	fs.BoolVar(&doUpdate, "update", false, "update ageout to the latest release and exit")
 
 	var debug bool
@@ -110,7 +108,7 @@ func Run(cfg Config) error {
 		return nil
 	}
 	if showVersion {
-		fmt.Fprintf(cfg.Stdout, "ageout %s\n", version.Version)
+		fmt.Fprintln(cfg.Stdout, versionLine())
 		return nil
 	}
 	if doUpdate {
@@ -204,7 +202,15 @@ func resolveTarget(target string, explicit bool) (root string, pattern *regexp.R
 	return ".", re, nil
 }
 
+// versionLine formats the tool name, released version, and the VCS commit
+// it was built from, e.g. "ageout v1.2.3 (commit abc1234def0)".
+func versionLine() string {
+	return fmt.Sprintf("ageout %s (commit %s)", version.Version, version.Commit())
+}
+
 func printUsage(w io.Writer) {
+	fmt.Fprintln(w, versionLine())
+	fmt.Fprintln(w)
 	fmt.Fprintln(w, "usage: ageout [flags] [directory|regexp]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "With no target, the current directory is scanned. If the target is an")
@@ -223,9 +229,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -r, -recursive     search directories recursively")
 	fmt.Fprintln(w, "  -c, -created       use file creation time instead of last modified time")
 	fmt.Fprintln(w, "      -dryrun        report target files without deleting them")
-	fmt.Fprintln(w, "  -s, -silent        suppress printing of every scanned file's status and elapsed age")
+	fmt.Fprintln(w, "      -silent        suppress printing of every scanned file's status and elapsed age")
 	fmt.Fprintln(w, "      -debug         print timestamped debug tracing of ageout's internal steps to stdout")
-	fmt.Fprintln(w, "  -u, -update        update ageout to the latest release and exit")
+	fmt.Fprintln(w, "      -update        update ageout to the latest release and exit")
 	fmt.Fprintln(w, "  -v, -version       print the version number and exit")
 	fmt.Fprintln(w, "  -h, -help          show this help message and exit")
 }
