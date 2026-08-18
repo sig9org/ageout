@@ -87,10 +87,37 @@ func TestRun_HelpFlag(t *testing.T) {
 			if !strings.Contains(out, "usage: ageout") {
 				t.Errorf("stdout = %q, want it to contain usage text", out)
 			}
-			if !strings.Contains(out, "ageout "+version.Version+" (commit ") {
-				t.Errorf("stdout = %q, want it to show the tool name, version, and commit", out)
+			if !strings.Contains(out, "ageout "+version.Version+"\n") {
+				t.Errorf("stdout = %q, want it to show the tool name and version", out)
+			}
+			if strings.Contains(out, "commit") {
+				t.Errorf("stdout = %q, want no commit ID", out)
 			}
 		})
+	}
+}
+
+func TestRun_HelpOtherFlagsAreAlphabetical(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run(Config{Args: []string{"-help"}, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	otherFlags := strings.SplitN(stdout.String(), "Other flags:\n", 2)
+	if len(otherFlags) != 2 {
+		t.Fatalf("stdout = %q, want Other flags section", stdout.String())
+	}
+	wantOrder := []string{"-created", "-debug", "-dryrun", "-help", "-recursive", "-rmdir", "-silent", "-update", "-version"}
+	previous := -1
+	for _, flagName := range wantOrder {
+		index := strings.Index(otherFlags[1], flagName)
+		if index < 0 {
+			t.Fatalf("Other flags = %q, want %s", otherFlags[1], flagName)
+		}
+		if index <= previous {
+			t.Fatalf("Other flags = %q, want alphabetical order %v", otherFlags[1], wantOrder)
+		}
+		previous = index
 	}
 }
 
@@ -103,9 +130,9 @@ func TestRun_VersionFlag(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 			got := strings.TrimSpace(stdout.String())
-			wantPrefix := "ageout " + version.Version + " (commit "
-			if !strings.HasPrefix(got, wantPrefix) || !strings.HasSuffix(got, ")") {
-				t.Errorf("stdout = %q, want it to match %q...)", got, wantPrefix)
+			want := "ageout " + version.Version
+			if got != want {
+				t.Errorf("stdout = %q, want %q", got, want)
 			}
 		})
 	}
@@ -222,6 +249,71 @@ func TestRun_RecursiveFlag(t *testing.T) {
 	sort.Strings(want)
 	if got := sortedLines(stdout.String()); !equalStrings(got, want) {
 		t.Errorf("stdout = %v, want %v", got, want)
+	}
+}
+
+func TestRun_RmdirRemovesEmptyDirectoriesAfterFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "empty-after-purge", "old.txt"))
+	writeFile(t, filepath.Join(dir, "kept", "fresh.txt"))
+	chdir(t, dir)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var stdout, stderr bytes.Buffer
+	err := Run(Config{
+		Args:   []string{"--day", "1", "-recursive", "-rmdir"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Now:    now,
+		GetFileTime: func(path string, _ os.FileInfo) time.Time {
+			if filepath.Base(path) == "old.txt" {
+				return now.Add(-24 * time.Hour)
+			}
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "empty-after-purge")); !os.IsNotExist(statErr) {
+		t.Errorf("empty-after-purge should have been removed, stat err = %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "kept")); statErr != nil {
+		t.Errorf("kept should remain, stat err = %v", statErr)
+	}
+	if !strings.Contains(stdout.String(), "[rmdir] empty-after-purge") {
+		t.Errorf("stdout = %q, want removed directory status", stdout.String())
+	}
+}
+
+func TestRun_RmdirWithoutRecursiveOnlyRemovesDirectEmptyDirectories(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "direct-empty"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "parent", "nested-empty"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeFile(t, filepath.Join(dir, "fresh.txt"))
+	chdir(t, dir)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var stdout, stderr bytes.Buffer
+	err := Run(Config{
+		Args:        []string{"--day", "1", "-rmdir"},
+		Stdout:      &stdout,
+		Stderr:      &stderr,
+		Now:         now,
+		GetFileTime: func(string, os.FileInfo) time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "direct-empty")); !os.IsNotExist(statErr) {
+		t.Errorf("direct-empty should have been removed, stat err = %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "parent", "nested-empty")); statErr != nil {
+		t.Errorf("nested-empty should remain without -recursive, stat err = %v", statErr)
 	}
 }
 
@@ -438,6 +530,16 @@ func TestRun_HelpMentionsSilentFlag(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "-silent") {
 		t.Errorf("stdout = %q, want it to mention -silent", stdout.String())
+	}
+}
+
+func TestRun_HelpMentionsRmdirFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run(Config{Args: []string{"--help"}, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "-rmdir") {
+		t.Errorf("stdout = %q, want it to mention -rmdir", stdout.String())
 	}
 }
 

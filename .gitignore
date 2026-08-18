@@ -1,7 +1,6 @@
 # Project-Specific
 
 
-
 # Ansible
 .ansible/
 *.retry
@@ -39,7 +38,6 @@ go.work.sum
 
 # go-task
 .task/
-.task_start_time
 
 # Python
 __marimo__/

@@ -83,13 +83,8 @@ Version strings are injected at build time via `-ldflags
 binary reporting `version.Version == "dev"`. A `dev` build can't self-update
 (see below) — `-update` requires a semver-parseable version.
 
-`version.Commit()` (`internal/version/version.go`) is separate from
-`Version` and needs no ldflags: it reads `runtime/debug.ReadBuildInfo`'s
-`vcs.revision`/`vcs.modified` settings, which the Go toolchain stamps into
-every binary automatically as long as the build happens inside a git
-checkout (true for both `task go-build` and `task go-all-build`, and for a
-plain local `go build .`). `-v`/`-version` and `-h`/`-help` both print
-`Version` and `Commit()` together via `versionLine()` in `cli.go`.
+`-v`/`-version` and `-h`/`-help` print only `Version`; commit IDs are not
+included in user-facing version information.
 
 ## Architecture
 
@@ -99,11 +94,12 @@ thin shim that calls `cli.Main` and prints any returned error via `logx`.
 
 ```
 cli.Run:
-  flag.FlagSet parses args           → age.Duration{Years,Months,Days,Hours,Minutes}, recursive, created, dryRun, silent, debug
+  flag.FlagSet parses args           → age.Duration{Years,Months,Days,Hours,Minutes}, recursive, rmdir, created, dryRun, silent, debug
   logx.New(cfg.Stdout, debug)        → Logger used for -debug tracing throughout the rest of Run
   scan.Files(root, opts)             → []string of candidate file paths (regex/recursive filtering)
   age.Duration.Cutoff(now)           → cutoff time.Time (calendar-aware: AddDate for Y/M/D, then hours/mins)
   purge.Purger{GetFileTime,Debugf}.Run(...) → walks files, deletes/reports/skips, prints per file
+  purge.RemoveEmptyDirs(...)         → optionally removes empty directories after the file pass
 ```
 
 `-update` short-circuits this pipeline entirely: it calls
@@ -169,9 +165,10 @@ Key design points, each with a reason that matters when touching the code:
   `-s` and `-u` were deliberately removed, so don't reintroduce them).
   `printUsage` in `cli.go` is hand-maintained plain text, not generated —
   keep it in sync with flag definitions by hand when adding/renaming flags.
-- **`scan.Files`** is the only place recursion/pattern-matching happens;
-  `purge.Purger.Run` has no knowledge of directories, patterns, or
-  recursion — it only sees a flat file list and per-file timestamps.
+- **`scan.Files`** is where file recursion/pattern-matching happens;
+  `purge.Purger.Run` only sees a flat file list and per-file timestamps.
+  The separate post-purge `purge.RemoveEmptyDirs` pass handles `-rmdir`,
+  using the same recursion setting and never removing the scan root itself.
 - Package boundaries mirror the pipeline stages 1:1: `age` (cutoff math),
   `birthtime` (per-OS creation time), `scan` (file discovery), `purge`
   (evaluate + delete/report), `cli` (flags + wiring), `logx` (colored
