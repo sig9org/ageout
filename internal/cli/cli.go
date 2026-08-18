@@ -72,6 +72,9 @@ func Run(cfg Config) error {
 	fs.BoolVar(&recursive, "r", false, "search directories recursively")
 	fs.BoolVar(&recursive, "recursive", false, "search directories recursively")
 
+	var removeEmptyDirs bool
+	fs.BoolVar(&removeEmptyDirs, "rmdir", false, "remove empty directories after deleting expired files")
+
 	var created bool
 	fs.BoolVar(&created, "c", false, "use file creation time instead of last modified time")
 	fs.BoolVar(&created, "created", false, "use file creation time instead of last modified time")
@@ -147,7 +150,7 @@ func Run(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	logger.Debugf("resolved target: root=%s pattern=%v recursive=%v", root, pattern, recursive)
+	logger.Debugf("resolved target: root=%s pattern=%v recursive=%v rmdir=%v", root, pattern, recursive, removeEmptyDirs)
 
 	files, err := scan.Files(root, scan.Options{Recursive: recursive, Pattern: pattern})
 	if err != nil {
@@ -179,7 +182,17 @@ func Run(cfg Config) error {
 	}
 
 	p := &purge.Purger{GetFileTime: getFileTime, Debugf: logger.Debugf}
-	_, err = p.Run(out, files, now, cutoff, dryRun)
+	results, err := p.Run(out, files, now, cutoff, dryRun)
+	if err != nil {
+		return err
+	}
+	if removeEmptyDirs {
+		var removedFiles []string
+		for _, result := range results {
+			removedFiles = append(removedFiles, result.Path)
+		}
+		_, err = purge.RemoveEmptyDirs(out, root, recursive, dryRun, removedFiles, logger.Debugf)
+	}
 	return err
 }
 
@@ -202,10 +215,9 @@ func resolveTarget(target string, explicit bool) (root string, pattern *regexp.R
 	return ".", re, nil
 }
 
-// versionLine formats the tool name, released version, and the VCS commit
-// it was built from, e.g. "ageout v1.2.3 (commit abc1234def0)".
+// versionLine formats the tool name and released version, e.g. "ageout v1.2.3".
 func versionLine() string {
-	return fmt.Sprintf("ageout %s (commit %s)", version.Version, version.Commit())
+	return fmt.Sprintf("ageout %s", version.Version)
 }
 
 func printUsage(w io.Writer) {
@@ -226,12 +238,13 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -M, -min int       minutes component of the age threshold")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Other flags:")
-	fmt.Fprintln(w, "  -r, -recursive     search directories recursively")
 	fmt.Fprintln(w, "  -c, -created       use file creation time instead of last modified time")
-	fmt.Fprintln(w, "      -dryrun        report target files without deleting them")
-	fmt.Fprintln(w, "      -silent        suppress printing of every scanned file's status and elapsed age")
 	fmt.Fprintln(w, "      -debug         print timestamped debug tracing of ageout's internal steps to stdout")
+	fmt.Fprintln(w, "      -dryrun        report target files without deleting them")
+	fmt.Fprintln(w, "  -h, -help          show this help message and exit")
+	fmt.Fprintln(w, "  -r, -recursive     search directories recursively")
+	fmt.Fprintln(w, "      -rmdir         remove empty directories after deleting expired files")
+	fmt.Fprintln(w, "      -silent        suppress printing of every scanned file's status and elapsed age")
 	fmt.Fprintln(w, "      -update        update ageout to the latest release and exit")
 	fmt.Fprintln(w, "  -v, -version       print the version number and exit")
-	fmt.Fprintln(w, "  -h, -help          show this help message and exit")
 }

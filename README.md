@@ -32,6 +32,7 @@ By default, age is judged by each file's **last modified time**. Pass
 | `-H` | `-hour` | Hours component of the age threshold |
 | `-M` | `-min` | Minutes component of the age threshold |
 | `-r` | `-recursive` | Search directories recursively |
+|  | `-rmdir` | Remove empty directories after deleting expired files |
 | `-c` | `-created` | Use file creation time instead of last modified time |
 |  | `-dryrun` | Report target files without deleting them |
 |  | `-silent` | Suppress printing of every scanned file's status and elapsed age |
@@ -56,9 +57,15 @@ age threshold and therefore kept. Pass `-silent` to suppress this output
 entirely. If both `-silent` and `-debug` are given, `-debug` tracing still
 prints — `-debug` takes priority over `-silent`.
 
-`-v`/`-version` and `-h`/`-help` both print the tool name, released
-version, and the commit it was built from, e.g. `ageout v1.2.3 (commit
-abc1234def0)`; `-h`/`-help` additionally prints full usage.
+Pass `-rmdir` to remove empty directories after the expired-file deletion
+pass. Without `-recursive`, only empty directories directly below the scan
+root are removed; with `-recursive`, empty directories are removed from the
+bottom up. The scan root itself is always kept. Under `-dryrun`, directories
+that would become empty are reported as `[dry-run]` without being removed.
+
+`-v`/`-version` and `-h`/`-help` both print the tool name and released
+version from the Git tag, e.g. `ageout v1.2.3`; `-h`/`-help` additionally
+prints full usage.
 
 Warnings are printed in orange, errors in red, and debug tracing in gray;
 normal status output is left uncolored. Set `NO_COLOR` (see
@@ -85,6 +92,9 @@ ageout -d 30 -created
 
 # Delete files older than 30 days without printing anything
 ageout -d 30 -silent
+
+# Delete old files recursively, then remove directories left empty
+ageout -d 30 -recursive -rmdir ./logs
 
 # Update ageout itself to the latest GitHub release
 ageout -update
