@@ -24,6 +24,10 @@ type Result struct {
 // judge age by creation time instead.
 type Purger struct {
 	GetFileTime func(path string, info os.FileInfo) time.Time
+	// IgnoreAge disables the age condition, allowing size-only filtering.
+	IgnoreAge bool
+	SizeGTE   *int64
+	SizeLTE   *int64
 
 	// Debugf, when set, receives per-file tracing (the file evaluated, its
 	// resolved age, and the resulting decision). It is nil by default;
@@ -76,7 +80,10 @@ func (p *Purger) Run(w io.Writer, files []string, now, cutoff time.Time, dryRun 
 		elapsed := formatElapsed(now, ft)
 		debugf("evaluating %s: fileTime=%s cutoff=%s elapsed=%s", f, ft.Format(time.RFC3339), cutoff.Format(time.RFC3339), elapsed)
 
-		if ft.After(cutoff) {
+		ageMatch := p.IgnoreAge || !ft.After(cutoff)
+		sizeMatch := (p.SizeGTE == nil || info.Size() >= *p.SizeGTE) &&
+			(p.SizeLTE == nil || info.Size() <= *p.SizeLTE)
+		if !ageMatch || !sizeMatch {
 			fmt.Fprintf(w, "[skip] %s (elapsed: %s)\n", f, elapsed)
 			continue
 		}
