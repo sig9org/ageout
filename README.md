@@ -36,6 +36,8 @@ By default, age is judged by each file's **last modified time**. Pass
 | `-c` | `-created` | Use file creation time instead of last modified time |
 |  | `-dryrun` | Report target files without deleting them |
 |  | `-silent` | Suppress printing of every scanned file's status and elapsed age |
+|  | `-size-gte SIZE` | Process files whose size is at least `SIZE` |
+|  | `-size-lte SIZE` | Process files whose size is at most `SIZE` |
 |  | `-debug` | Print timestamped debug tracing of ageout's internal steps to stdout |
 |  | `-update` | Update ageout to the latest release and exit |
 | `-v` | `-version` | Print the version number and exit |
@@ -93,12 +95,24 @@ ageout -d 30 -created
 # Delete files older than 30 days without printing anything
 ageout -d 30 -silent
 
+# Delete files at least 10 megabytes in size
+ageout -size-gte 10M
+
 # Delete old files recursively, then remove directories left empty
 ageout -d 30 -recursive -rmdir ./logs
 
 # Update ageout itself to the latest GitHub release
 ageout -update
 ```
+
+### Release hashes and signatures
+
+`task go-build-all` also creates `checksums.txt` and Ed25519 `.sig` files for
+the darwin and linux binaries. Set `SELFUPDATE_PRIVATE_KEY` to an Ed25519
+private key file before running the task. The key may be a raw 64-byte key or
+a PKCS#8 PEM key; keep it outside the repository. Upload the generated
+signature files and `checksums.txt` alongside the binaries in the GitHub
+release.
 
 ## Development
 

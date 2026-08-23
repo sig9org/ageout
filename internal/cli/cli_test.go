@@ -107,7 +107,7 @@ func TestRun_HelpOtherFlagsAreAlphabetical(t *testing.T) {
 	if len(otherFlags) != 2 {
 		t.Fatalf("stdout = %q, want Other flags section", stdout.String())
 	}
-	wantOrder := []string{"-created", "-debug", "-dryrun", "-help", "-recursive", "-rmdir", "-silent", "-update", "-version"}
+	wantOrder := []string{"-created", "-debug", "-dryrun", "-help", "-recursive", "-rmdir", "-size-gte", "-size-lte", "-silent", "-update", "-version"}
 	previous := -1
 	for _, flagName := range wantOrder {
 		index := strings.Index(otherFlags[1], flagName)
@@ -143,6 +143,61 @@ func TestRun_RequiresAgeFlag(t *testing.T) {
 	err := Run(Config{Args: []string{"-r"}, Stdout: &stdout, Stderr: &stderr})
 	if err == nil {
 		t.Fatal("expected an error when no age flag is given")
+	}
+}
+
+func TestRun_SizeFiltersCanBeUsedWithoutAge(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "small"), []byte("1234"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "large"), []byte("1234567890"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	err := Run(Config{Args: []string{"--size-gte", "5B", "--size-lte", "10"}, Stdout: &stdout, Stderr: &stderr})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := sortedLines(stdout.String()); !equalStrings(got, []string{
+		"[delete] large (elapsed: 0d0h0m)",
+		"[skip] small (elapsed: 0d0h0m)",
+	}) {
+		t.Errorf("stdout = %v, want only the file satisfying both size conditions", got)
+	}
+}
+
+func TestRun_SizeAndAgeFiltersAreCombined(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "old-small"), []byte("1234"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new-large"), []byte("1234567890"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, dir)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var stdout, stderr bytes.Buffer
+	err := Run(Config{
+		Args: []string{"--day", "1", "--size-gte", "5"}, Stdout: &stdout, Stderr: &stderr,
+		Now: now,
+		GetFileTime: func(path string, _ os.FileInfo) time.Time {
+			if filepath.Base(path) == "old-small" {
+				return now.Add(-48 * time.Hour)
+			}
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := sortedLines(stdout.String()); !equalStrings(got, []string{
+		"[skip] new-large (elapsed: 0d0h0m)",
+		"[skip] old-small (elapsed: 2d0h0m)",
+	}) {
+		t.Errorf("stdout = %v, want both files skipped by one of the combined conditions", got)
 	}
 }
 

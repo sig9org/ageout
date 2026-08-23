@@ -18,6 +18,7 @@ import (
 	"github.com/sig9org/ageout/internal/purge"
 	"github.com/sig9org/ageout/internal/scan"
 	"github.com/sig9org/ageout/internal/selfupdate"
+	"github.com/sig9org/ageout/internal/size"
 	"github.com/sig9org/ageout/internal/version"
 )
 
@@ -67,6 +68,10 @@ func Run(cfg Config) error {
 	fs.IntVar(&d.Hours, "hour", 0, "hours component of the age threshold")
 	fs.IntVar(&d.Minutes, "M", 0, "minutes component of the age threshold")
 	fs.IntVar(&d.Minutes, "min", 0, "minutes component of the age threshold")
+
+	var sizeGTE, sizeLTE string
+	fs.StringVar(&sizeGTE, "size-gte", "", "minimum file size (e.g. 10K)")
+	fs.StringVar(&sizeLTE, "size-lte", "", "maximum file size (e.g. 10K)")
 
 	var recursive bool
 	fs.BoolVar(&recursive, "r", false, "search directories recursively")
@@ -134,8 +139,32 @@ func Run(cfg Config) error {
 		return nil
 	}
 
-	if d.IsZero() {
-		return errors.New("at least one of -y/-year, -m/-month, -d/-day, -H/-hour, -M/-min must be specified")
+	var sizeGTEBytes, sizeLTEBytes *int64
+	var sizeGTESet, sizeLTESet bool
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "size-gte":
+			sizeGTESet = true
+		case "size-lte":
+			sizeLTESet = true
+		}
+	})
+	if sizeGTESet {
+		parsed, err := size.Parse(sizeGTE)
+		if err != nil {
+			return fmt.Errorf("invalid -size-gte: %w", err)
+		}
+		sizeGTEBytes = &parsed
+	}
+	if sizeLTESet {
+		parsed, err := size.Parse(sizeLTE)
+		if err != nil {
+			return fmt.Errorf("invalid -size-lte: %w", err)
+		}
+		sizeLTEBytes = &parsed
+	}
+	if d.IsZero() && sizeGTEBytes == nil && sizeLTEBytes == nil {
+		return errors.New("at least one age or file-size option must be specified")
 	}
 	if fs.NArg() > 1 {
 		return fmt.Errorf("unexpected arguments: %v", fs.Args()[1:])
@@ -181,7 +210,13 @@ func Run(cfg Config) error {
 		}
 	}
 
-	p := &purge.Purger{GetFileTime: getFileTime, Debugf: logger.Debugf}
+	p := &purge.Purger{
+		GetFileTime: getFileTime,
+		IgnoreAge:   d.IsZero(),
+		SizeGTE:     sizeGTEBytes,
+		SizeLTE:     sizeLTEBytes,
+		Debugf:      logger.Debugf,
+	}
 	results, err := p.Run(out, files, now, cutoff, dryRun)
 	if err != nil {
 		return err
@@ -244,6 +279,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -h, -help          show this help message and exit")
 	fmt.Fprintln(w, "  -r, -recursive     search directories recursively")
 	fmt.Fprintln(w, "      -rmdir         remove empty directories after deleting expired files")
+	fmt.Fprintln(w, "      -size-gte SIZE process files at least this size (b, K, M, or G)")
+	fmt.Fprintln(w, "      -size-lte SIZE process files at most this size (b, K, M, or G)")
 	fmt.Fprintln(w, "      -silent        suppress printing of every scanned file's status and elapsed age")
 	fmt.Fprintln(w, "      -update        update ageout to the latest release and exit")
 	fmt.Fprintln(w, "  -v, -version       print the version number and exit")
